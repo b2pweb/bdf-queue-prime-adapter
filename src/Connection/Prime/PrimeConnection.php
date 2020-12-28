@@ -114,7 +114,7 @@ class PrimeConnection implements ConnectionDriverInterface, ManageableQueueInter
      */
     public function connection()
     {
-        return $this->connections->connection($this->config['host']);
+        return $this->connections->getConnection($this->config['host']);
     }
 
     /**
