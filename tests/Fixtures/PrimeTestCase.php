@@ -29,13 +29,14 @@ trait PrimeTestCase
                         ],
                     ]
                 ],
+                'types' => [
+                    new JsonType(),
+                    new ArrayObjectType(),
+                    new ObjectType(),
+                    new ArrayType(),
+                    TypeInterface::TIMESTAMP => TimestampType::class,
+                ]
             ]);
-
-            Prime::service()->types()->register(new JsonType());
-            Prime::service()->types()->register(new ArrayObjectType());
-            Prime::service()->types()->register(new ObjectType());
-            Prime::service()->types()->register(new ArrayType());
-            Prime::service()->types()->register(TimestampType::class, TypeInterface::TIMESTAMP);
         }
     }
 }
