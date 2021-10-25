@@ -22,7 +22,7 @@
   "minimum-stability": "dev",
   "require": {
     "php": ">=7.1",
-    "b2pweb/bdf-prime": "~1.0",
+    "b2pweb/bdf-prime": "~1.0|~2.0",
     "b2pweb/bdf-util": "~1.0",
     "symfony/console": "~4.3|~5.0"
   },

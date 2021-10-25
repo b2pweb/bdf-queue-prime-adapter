@@ -128,7 +128,7 @@ class DbFailedJobStorage implements FailedJobStorageInterface
         return $this->connection->schema()
             ->simulate()
             ->table($this->schema['table'], function(TypesHelperTableBuilder $table) {
-                $table->bigint('id', true);
+                $table->bigint('id')->autoincrement();
                 $table->string('name', 255);
                 $table->string('connection', 90);
                 $table->string('queue', 90);

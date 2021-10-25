@@ -137,7 +137,7 @@ class PrimeConnection implements ConnectionDriverInterface, ManageableQueueInter
         return $this->connection()->schema()
             //->simulate() // autoflush ou buffered ?
             ->table($this->config['table'], function(TypesHelperTableBuilder $table) {
-                $table->bigint('id', true);
+                $table->bigint('id')->autoincrement();
                 $table->string('queue', 90);
                 $table->text('raw');
                 $table->boolean('reserved');
