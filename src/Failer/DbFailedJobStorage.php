@@ -137,6 +137,7 @@ class DbFailedJobStorage implements FailedJobStorageInterface
                 $table->text('error')->nillable();
                 $table->dateTime('failed_at');
                 $table->primary('id');
+                $table->index('failed_at');
             });
     }
     
