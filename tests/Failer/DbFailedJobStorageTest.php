@@ -126,10 +126,11 @@ class DbFailedJobStorageTest extends TestCase
 
         $jobs = $this->provider->all();
         $jobs->load();
+        $collection = $jobs->collection();
 
-        $this->assertSame(2, count($jobs));
-        $this->assertSame('queue1', $jobs[0]->queue);
-        $this->assertSame('queue2', $jobs[1]->queue);
+        $this->assertSame(2, count($collection));
+        $this->assertSame('queue1', $collection[0]->queue);
+        $this->assertSame('queue2', $collection[1]->queue);
     }
     
     /**
