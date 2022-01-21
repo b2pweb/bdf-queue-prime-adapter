@@ -67,7 +67,9 @@ class DbFailedJobStorageTest extends TestCase
         $this->assertSame($message->toQueue(), $created->messageContent);
         $this->assertSame(QueuedMessage::class, $created->messageClass);
         $this->assertSame('foo', $created->error);
+        $this->assertSame(0, $created->attempts);
         $this->assertInstanceOf(\DateTime::class, $created->failedAt);
+        $this->assertInstanceOf(\DateTime::class, $created->firstFailedAt);
     }
 
     /**
@@ -110,7 +112,9 @@ class DbFailedJobStorageTest extends TestCase
         $this->assertSame($message->toQueue(), $created->messageContent);
         $this->assertSame(QueuedMessage::class, $created->messageClass);
         $this->assertSame($created->error, $job->error);
+        $this->assertSame(0, $job->attempts);
         $this->assertInstanceOf(\DateTime::class, $job->failedAt);
+        $this->assertInstanceOf(\DateTime::class, $job->firstFailedAt);
     }
 
     /**
