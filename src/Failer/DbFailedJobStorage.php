@@ -160,7 +160,7 @@ class DbFailedJobStorage implements FailedJobStorageInterface
                 $table->string('connection', 90);
                 $table->string('queue', 90);
                 $table->string('messageClass');
-                $table->integer('attempts');
+                $table->integer('attempts', 0);
                 $table->arrayObject('messageContent')->nillable();
                 $table->text('error')->nillable();
                 $table->dateTime('failed_at');
@@ -191,7 +191,8 @@ class DbFailedJobStorage implements FailedJobStorageInterface
         $job->messageClass = $row['messageClass'] ?? null;
         $job->messageContent = $this->connection->fromDatabase($row['messageContent'] ?? null, TypeInterface::ARRAY_OBJECT);
         $job->failedAt = $this->connection->fromDatabase($row['failed_at'], TypeInterface::DATETIME);
-        $job->firstFailedAt = $this->connection->fromDatabase($row['first_failed_at'], TypeInterface::DATETIME);
+        // For jobs have not been migrated: we set the failed at date by default.
+        $job->firstFailedAt = $this->connection->fromDatabase($row['first_failed_at'], TypeInterface::DATETIME) ?? $job->failedAt;
 
         return $job;
     }

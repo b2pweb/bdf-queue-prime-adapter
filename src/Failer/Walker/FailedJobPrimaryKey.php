@@ -9,8 +9,7 @@ use Bdf\Queue\Failer\FailedJob;
 /**
  * Extract the primary key of FailedJob instance
  *
- * @template E as object
- * @implements KeyInterface<E>
+ * @implements KeyInterface<FailedJob>
  */
 final class FailedJobPrimaryKey implements KeyInterface
 {
