@@ -67,7 +67,9 @@ class DbFailedJobStorageTest extends TestCase
         $this->assertSame($message->toQueue(), $created->messageContent);
         $this->assertSame(QueuedMessage::class, $created->messageClass);
         $this->assertSame('foo', $created->error);
+        $this->assertSame(0, $created->attempts);
         $this->assertInstanceOf(\DateTime::class, $created->failedAt);
+        $this->assertInstanceOf(\DateTime::class, $created->firstFailedAt);
     }
 
     /**
@@ -79,6 +81,9 @@ class DbFailedJobStorageTest extends TestCase
         $message->setName('job');
         $message->setConnection('queue-connection');
         $message->setQueue('queue');
+        $message->setHeaders([
+            'failer-failed-at' => new \DateTime(),
+        ]);
 
         $created = FailedJob::create($message, new \Exception('foo'));
 
@@ -107,7 +112,9 @@ class DbFailedJobStorageTest extends TestCase
         $this->assertSame($message->toQueue(), $created->messageContent);
         $this->assertSame(QueuedMessage::class, $created->messageClass);
         $this->assertSame($created->error, $job->error);
+        $this->assertSame(0, $job->attempts);
         $this->assertInstanceOf(\DateTime::class, $job->failedAt);
+        $this->assertInstanceOf(\DateTime::class, $job->firstFailedAt);
     }
 
     /**
@@ -132,7 +139,33 @@ class DbFailedJobStorageTest extends TestCase
         $this->assertSame('queue1', $collection[0]->queue);
         $this->assertSame('queue2', $collection[1]->queue);
     }
-    
+
+    /**
+     *
+     */
+    public function test_all_with_cursor()
+    {
+        $this->provider = DbFailedJobStorage::make(Prime::service(), ['connection' => 'test', 'table' => 'failed'], 1);
+
+        foreach ([0, 1, 2, 3, 4] as $id) {
+            $this->provider->store(new FailedJob([
+                'connection' => 'queue-connection',
+                'queue' => "queue{$id}",
+            ]));
+        }
+
+        $jobs = $this->provider->all();
+        $this->assertSame(5, $jobs->size());
+
+        $i = 0;
+        foreach ($jobs as $job) {
+            $this->assertSame("queue{$i}", $job->queue);
+            $i++;
+        }
+
+        $this->assertSame(5, $i);
+    }
+
     /**
      * 
      */

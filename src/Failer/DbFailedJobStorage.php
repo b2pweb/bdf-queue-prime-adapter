@@ -3,16 +3,22 @@
 namespace Bdf\Queue\Failer;
 
 use Bdf\Prime\Connection\ConnectionInterface;
+use Bdf\Prime\Query\Contract\Orderable;
+use Bdf\Prime\Query\Pagination\Walker;
+use Bdf\Prime\Query\Pagination\WalkStrategy\KeyWalkStrategy;
 use Bdf\Prime\Schema\Builder\TypesHelperTableBuilder;
 use Bdf\Prime\Schema\SchemaManagerInterface;
 use Bdf\Prime\ServiceLocator;
 use Bdf\Prime\Types\TypeInterface;
+use Bdf\Queue\Failer\Walker\FailedJobPrimaryKey;
 
 /**
  * DbFailedJobStorage
  */
 class DbFailedJobStorage implements FailedJobStorageInterface
 {
+    const DEFAULT_MAX_ROWS = 50;
+
     /**
      * The prime connection
      *
@@ -28,28 +34,37 @@ class DbFailedJobStorage implements FailedJobStorageInterface
     private $schema;
 
     /**
+     * The row size of the cursor for the prime walker
+     *
+     * @var int
+     */
+    private $maxRows;
+
+    /**
      * Create a new database failed job provider.
      *
-     * @param  ServiceLocator  $locator
-     * @param  array           $schema
-     *
+     * @param ServiceLocator $locator
+     * @param array $schema
+     * @param int $maxRows
      * @return static
      */
-    public static function make(ServiceLocator $locator, array $schema)
+    public static function make(ServiceLocator $locator, array $schema, int $maxRows = self::DEFAULT_MAX_ROWS)
     {
-        return new static($locator->connection($schema['connection']), $schema);
+        return new static($locator->connection($schema['connection']), $schema, $maxRows);
     }
 
     /**
      * Create a new database failed job provider.
      *
-     * @param  ConnectionInterface  $connection
-     * @param  array                $schema
+     * @param ConnectionInterface $connection
+     * @param array $schema
+     * @param int $maxRows
      */
-    public function __construct(ConnectionInterface $connection, array $schema)
+    public function __construct(ConnectionInterface $connection, array $schema, int $maxRows = self::DEFAULT_MAX_ROWS)
     {
         $this->connection = $connection;
         $this->schema = $schema;
+        $this->maxRows = $maxRows;
     }
 
     /**
@@ -74,7 +89,9 @@ class DbFailedJobStorage implements FailedJobStorageInterface
             'messageClass' => $job->messageClass,
             'messageContent' => $job->messageContent,
             'error' => $job->error,
+            'attempts' => (int)$job->attempts,
             'failed_at' => $job->failedAt,
+            'first_failed_at' => $job->firstFailedAt,
         ]);
     }
 
@@ -83,10 +100,20 @@ class DbFailedJobStorage implements FailedJobStorageInterface
      */
     public function all()
     {
-        return $this->connection->from($this->schema['table'])
+        $walker = $this->connection->from($this->schema['table'])
             ->post([$this, 'postProcessor'])
-            ->order('failed_at', 'asc')
-            ->walk(50);
+            /*
+             * Use an order by id than failed_at for a functional purpose
+             * The key walk strategy works only if the cursor is ordered on a unique field.
+             */
+            ->order('id', Orderable::ORDER_ASC)
+            ->walk($this->maxRows);
+
+        if ($walker instanceof Walker) {
+            $walker->setStrategy(new KeyWalkStrategy(new FailedJobPrimaryKey()));
+        }
+
+        return $walker;
     }
 
     /**
@@ -133,11 +160,15 @@ class DbFailedJobStorage implements FailedJobStorageInterface
                 $table->string('connection', 90);
                 $table->string('queue', 90);
                 $table->string('messageClass');
+                $table->integer('attempts', 0);
                 $table->arrayObject('messageContent')->nillable();
                 $table->text('error')->nillable();
                 $table->dateTime('failed_at');
+                $table->dateTime('first_failed_at');
                 $table->primary('id');
                 $table->index('failed_at');
+                $table->index('queue');
+                $table->index('attempts');
             });
     }
     
@@ -156,9 +187,12 @@ class DbFailedJobStorage implements FailedJobStorageInterface
         $job->connection = $row['connection'];
         $job->queue = $row['queue'];
         $job->error = $row['error'];
+        $job->attempts = (int)$row['attempts'];
         $job->messageClass = $row['messageClass'] ?? null;
         $job->messageContent = $this->connection->fromDatabase($row['messageContent'] ?? null, TypeInterface::ARRAY_OBJECT);
         $job->failedAt = $this->connection->fromDatabase($row['failed_at'], TypeInterface::DATETIME);
+        // For jobs have not been migrated: we set the failed at date by default.
+        $job->firstFailedAt = $this->connection->fromDatabase($row['first_failed_at'], TypeInterface::DATETIME) ?? $job->failedAt;
 
         return $job;
     }
