@@ -6,6 +6,7 @@ use Bdf\Prime\Connection\ConnectionInterface;
 use Bdf\Prime\Query\Contract\Orderable;
 use Bdf\Prime\Query\Pagination\Walker;
 use Bdf\Prime\Query\Pagination\WalkStrategy\KeyWalkStrategy;
+use Bdf\Prime\Query\QueryInterface;
 use Bdf\Prime\Schema\Builder\TypesHelperTableBuilder;
 use Bdf\Prime\Schema\SchemaManagerInterface;
 use Bdf\Prime\ServiceLocator;
@@ -14,10 +15,16 @@ use Bdf\Queue\Failer\Walker\FailedJobPrimaryKey;
 
 /**
  * DbFailedJobStorage
+ *
+ * @deprecated Use DbFailedJobRepository instead
  */
-class DbFailedJobStorage implements FailedJobStorageInterface
+class DbFailedJobStorage implements FailedJobRepositoryInterface
 {
     const DEFAULT_MAX_ROWS = 50;
+    const FIELD_MAPPING = [
+        'failedAt' => 'failed_at',
+        'firstFailedAt' => 'first_failed_at',
+    ];
 
     /**
      * The prime connection
@@ -46,6 +53,7 @@ class DbFailedJobStorage implements FailedJobStorageInterface
      * @param ServiceLocator $locator
      * @param array $schema
      * @param int $maxRows
+     *
      * @return static
      */
     public static function make(ServiceLocator $locator, array $schema, int $maxRows = self::DEFAULT_MAX_ROWS)
@@ -60,7 +68,7 @@ class DbFailedJobStorage implements FailedJobStorageInterface
      * @param array $schema
      * @param int $maxRows
      */
-    public function __construct(ConnectionInterface $connection, array $schema, int $maxRows = self::DEFAULT_MAX_ROWS)
+    public final function __construct(ConnectionInterface $connection, array $schema, int $maxRows = self::DEFAULT_MAX_ROWS)
     {
         $this->connection = $connection;
         $this->schema = $schema;
@@ -80,7 +88,7 @@ class DbFailedJobStorage implements FailedJobStorageInterface
     /**
      * {@inheritdoc}
      */
-    public function store(FailedJob $job)
+    public function store(FailedJob $job): void
     {
         $this->connection->insert($this->schema['table'], [
             'name' => (string)$job->name,
@@ -98,22 +106,9 @@ class DbFailedJobStorage implements FailedJobStorageInterface
     /**
      * {@inheritdoc}
      */
-    public function all()
+    public function all(): iterable
     {
-        $walker = $this->connection->from($this->schema['table'])
-            ->post([$this, 'postProcessor'])
-            /*
-             * Use an order by id than failed_at for a functional purpose
-             * The key walk strategy works only if the cursor is ordered on a unique field.
-             */
-            ->order('id', Orderable::ORDER_ASC)
-            ->walk($this->maxRows);
-
-        if ($walker instanceof Walker) {
-            $walker->setStrategy(new KeyWalkStrategy(new FailedJobPrimaryKey()));
-        }
-
-        return $walker;
+        return $this->toWalker($this->query());
     }
 
     /**
@@ -121,8 +116,7 @@ class DbFailedJobStorage implements FailedJobStorageInterface
      */
     public function find($id)
     {
-        return $this->connection->from($this->schema['table'])
-            ->post([$this, 'postProcessor'])
+        return $this->query()
             ->where('id', $id)
             ->first();
     }
@@ -142,7 +136,52 @@ class DbFailedJobStorage implements FailedJobStorageInterface
     {
         $this->connection->schema()->truncate($this->schema['table']);
     }
-    
+
+    /**
+     * {@inheritdoc}
+     */
+    public function findById($id): ?FailedJob
+    {
+        return $this->find($id);
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function search(FailedJobCriteria $criteria): iterable
+    {
+        $query = $this->query();
+
+        $this->applyCriteria($query, $criteria);
+
+        return $this->toWalker($query);
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function purge(FailedJobCriteria $criteria): int
+    {
+        if ($criteria->toArray() === []) {
+            $this->flush();
+
+            return -1;
+        }
+
+        $query = $this->query()->select(['id']);
+        $this->applyCriteria($query, $criteria);
+
+        return $query->delete();
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function delete(FailedJob $job): bool
+    {
+        return $this->forget($job->id);
+    }
+
     /**
      * Create Schema
      *
@@ -150,7 +189,7 @@ class DbFailedJobStorage implements FailedJobStorageInterface
      *
      * @return SchemaManagerInterface
      */
-    public function schema()
+    public function schema(): SchemaManagerInterface
     {
         return $this->connection->schema()
             ->simulate()
@@ -179,7 +218,7 @@ class DbFailedJobStorage implements FailedJobStorageInterface
      * 
      * @return FailedJob
      */
-    public function postProcessor($row)
+    public function postProcessor(array $row): FailedJob
     {
         $job = new FailedJob();
         $job->id = $row['id'];
@@ -195,5 +234,62 @@ class DbFailedJobStorage implements FailedJobStorageInterface
         $job->firstFailedAt = $this->connection->fromDatabase($row['first_failed_at'], TypeInterface::DATETIME) ?? $job->failedAt;
 
         return $job;
+    }
+
+    /**
+     * Create a query for access to the failer table
+     *
+     * @return QueryInterface
+     */
+    private function query(): QueryInterface
+    {
+        return $this->connection->from($this->schema['table'])->post([$this, 'postProcessor']);
+    }
+
+    /**
+     * Apply criteria on query
+     *
+     * @param QueryInterface $query
+     * @param FailedJobCriteria $criteria
+     *
+     * @return void
+     */
+    private function applyCriteria(QueryInterface $query, FailedJobCriteria $criteria): void
+    {
+        $criteria->apply(function (string $field, string $operator, $value) use($query) {
+            if ($operator === FailedJobCriteria::WILDCARD) {
+                $operator = ':like';
+                $value = str_replace('*', '%', $value);
+            }
+
+            $field = self::FIELD_MAPPING[$field] ?? $field;
+
+            $query->where($field, $operator, $value);
+        });
+    }
+
+    /**
+     * Get walker for the given query
+     * The walker supports deletion during the iteration
+     *
+     * @param QueryInterface $query
+     *
+     * @return Walker
+     */
+    private function toWalker(QueryInterface $query): Walker
+    {
+        $walker = $query
+            /*
+             * Use an order by id than failed_at for a functional purpose
+             * The key walk strategy works only if the cursor is ordered on a unique field.
+             */
+            ->order('id', Orderable::ORDER_ASC)
+            ->walk($this->maxRows);
+
+        if ($walker instanceof Walker) {
+            $walker->setStrategy(new KeyWalkStrategy(new FailedJobPrimaryKey()));
+        }
+
+        return $walker;
     }
 }

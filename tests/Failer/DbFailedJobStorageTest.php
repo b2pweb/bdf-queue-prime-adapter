@@ -115,6 +115,8 @@ class DbFailedJobStorageTest extends TestCase
         $this->assertSame(0, $job->attempts);
         $this->assertInstanceOf(\DateTime::class, $job->failedAt);
         $this->assertInstanceOf(\DateTime::class, $job->firstFailedAt);
+
+        $this->assertEquals($job, $this->provider->findById(1));
     }
 
     /**
@@ -187,7 +189,33 @@ class DbFailedJobStorageTest extends TestCase
         $this->assertTrue($result);
         $this->assertSame(1, count($jobs));
     }
-    
+
+    /**
+     *
+     */
+    public function test_delete()
+    {
+        $this->provider->store(new FailedJob([
+            'connection' => 'queue-connection',
+            'queue' => 'queue1',
+        ]));
+        $this->provider->store(new FailedJob([
+            'connection' => 'queue-connection',
+            'queue' => 'queue2',
+        ]));
+
+        $toDelete = $this->provider->findById(1);
+
+        $result = $this->provider->delete($toDelete);
+        $jobs = $this->provider->all();
+        $jobs->load();
+
+        $this->assertTrue($result);
+        $this->assertEquals([$this->provider->findById(2)], iterator_to_array($jobs));
+
+        $this->assertFalse($this->provider->delete($toDelete));
+    }
+
     /**
      *
      */
@@ -205,5 +233,94 @@ class DbFailedJobStorageTest extends TestCase
         $this->provider->flush();
         
         $this->assertSame(0, count($this->provider->all()));
+    }
+
+    /**
+     *
+     */
+    public function test_purge_with_criteria()
+    {
+        $this->provider->store(new FailedJob([
+            'connection' => 'queue-connection',
+            'queue' => 'queue1',
+        ]));
+        $this->provider->store(new FailedJob([
+            'connection' => 'queue-connection',
+            'queue' => 'queue2',
+        ]));
+
+        $this->assertEquals(1, $this->provider->purge((new FailedJobCriteria())->queue('queue2')));
+        $this->assertEquals([$this->provider->findById(1)], iterator_to_array($this->provider->all()));
+    }
+
+    /**
+     *
+     */
+    public function test_purge_without_criteria()
+    {
+        $this->provider->store(new FailedJob([
+            'connection' => 'queue-connection',
+            'queue' => 'queue1',
+        ]));
+        $this->provider->store(new FailedJob([
+            'connection' => 'queue-connection',
+            'queue' => 'queue2',
+        ]));
+
+        $this->assertEquals(-1, $this->provider->purge(new FailedJobCriteria()));
+        $this->assertEmpty(iterator_to_array($this->provider->all()));
+    }
+
+    /**
+     * @dataProvider provideSearchCriteria
+     */
+    public function test_search(FailedJobCriteria $criteria, array $expectedIds)
+    {
+        $this->provider->store(new FailedJob([
+            'connection' => 'conn1',
+            'queue' => 'queue1',
+            'name' => 'Foo',
+            'failedAt' => new \DateTime('2022-01-15 15:02:30'),
+            'error' => 'my error',
+        ]));
+        $this->provider->store(new FailedJob([
+            'connection' => 'conn1',
+            'queue' => 'queue2',
+            'name' => 'Bar',
+            'failedAt' => new \DateTime('2022-01-15 22:14:15'),
+            'error' => 'my other error',
+        ]));
+        $this->provider->store(new FailedJob([
+            'connection' => 'conn2',
+            'queue' => 'queue2',
+            'name' => 'Baz',
+            'error' => 'hello world',
+            'failedAt' => new \DateTime('2021-12-21 08:00:35'),
+        ]));
+
+        $this->assertEqualsCanonicalizing($expectedIds, array_map(function (FailedJob $job) {
+            return $job->id;
+        }, iterator_to_array($this->provider->search($criteria))));
+    }
+
+    public function provideSearchCriteria()
+    {
+        return [
+            'empty' => [new FailedJobCriteria(), [1, 2, 3]],
+            'connection' => [(new FailedJobCriteria())->connection('conn1'), [1, 2]],
+            'queue' => [(new FailedJobCriteria())->queue('queue2'), [2, 3]],
+            'name' => [(new FailedJobCriteria())->name('Foo'), [1]],
+            'name wildcard' => [(new FailedJobCriteria())->name('Ba*'), [2, 3]],
+            'error' => [(new FailedJobCriteria())->error('my error'), [1]],
+            'error wildcard' => [(new FailedJobCriteria())->error('my*error'), [1, 2]],
+            'error wildcard contains' => [(new FailedJobCriteria())->error('*or*'), [1, 2, 3]],
+            'failedAt with date' => [(new FailedJobCriteria())->failedAt(new \DateTime('2022-01-15 22:14:15')), [2]],
+            'failedAt with string' => [(new FailedJobCriteria())->failedAt('2022-01-15 22:14:15'), [2]],
+            'failedAt with wildcard' => [(new FailedJobCriteria())->failedAt('2022-01-15*'), [1, 2]],
+            'failedAt with operator' => [(new FailedJobCriteria())->failedAt('2022-01-01', '<'), [3]],
+            'failedAt with operator on value' => [(new FailedJobCriteria())->failedAt('> 2022-01-01'), [1, 2]],
+            'queue + connection' => [(new FailedJobCriteria())->connection('conn1')->queue('queue2'), [2]],
+            'none match' => [(new FailedJobCriteria())->name('Foo')->error('*world*'), []],
+        ];
     }
 }
