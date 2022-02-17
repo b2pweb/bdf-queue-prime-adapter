@@ -103,6 +103,10 @@ class DbFailedJobStorage implements FailedJobStorageInterface
         $walker = $this->connection->from($this->schema['table'])
             ->post([$this, 'postProcessor'])
             /*
+             * Set a limit on date to not load futur failed message
+             */
+            ->where('failed_at', '<=', new \DateTime())
+            /*
              * Use an order by id than failed_at for a functional purpose
              * The key walk strategy works only if the cursor is ordered on a unique field.
              */
