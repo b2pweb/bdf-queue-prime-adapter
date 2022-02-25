@@ -221,7 +221,8 @@ class DbFailedJobStorage implements FailedJobRepositoryInterface
     public function postProcessor(array $row): FailedJob
     {
         $job = new FailedJob();
-        $job->id = $row['id'];
+        // PHP 8.1 compatibility : PDO use native number type, so cast to string to keep compatibility
+        $job->id = $this->connection->fromDatabase($row['id'], TypeInterface::BIGINT);
         $job->name = $row['name'];
         $job->connection = $row['connection'];
         $job->queue = $row['queue'];
