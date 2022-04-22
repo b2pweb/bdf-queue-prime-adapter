@@ -5,6 +5,7 @@ namespace Bdf\Queue\Connection\Prime;
 use Bdf\Prime\Query\Expression\Raw;
 use Bdf\Prime\Types\TypeInterface;
 use Bdf\Queue\Connection\ConnectionDriverInterface;
+use Bdf\Queue\Connection\CountableQueueDriverInterface;
 use Bdf\Queue\Connection\Extension\EnvelopeHelper;
 use Bdf\Queue\Connection\PeekableQueueDriverInterface;
 use Bdf\Queue\Connection\QueueDriverInterface;
@@ -17,7 +18,7 @@ use DateTime;
 /**
  * Queue driver for PrimeConnection
  */
-class PrimeQueue implements QueueDriverInterface, ReservableQueueDriverInterface, PeekableQueueDriverInterface
+class AbstractPrimeQueue implements QueueDriverInterface, ReservableQueueDriverInterface, PeekableQueueDriverInterface
 {
     use EnvelopeHelper;
 
@@ -138,9 +139,9 @@ class PrimeQueue implements QueueDriverInterface, ReservableQueueDriverInterface
     /**
      * {@inheritdoc}
      */
-    public function count(string $queue): ?int
+    public function count(string $queueName): int
     {
-        return $this->connection->table()->where('queue', $queue)->count();
+        return $this->connection->table()->where('queue', $queueName)->count();
     }
 
     /**
@@ -269,5 +270,17 @@ class PrimeQueue implements QueueDriverInterface, ReservableQueueDriverInterface
             'available_at'  => $available,
             'created_at'    => new DateTime(),
         ];
+    }
+}
+
+if (class_exists(CountableQueueDriverInterface::class)) {
+    class PrimeQueue extends AbstractPrimeQueue implements CountableQueueDriverInterface
+    {
+
+    }
+} else {
+    class PrimeQueue extends AbstractPrimeQueue
+    {
+
     }
 }

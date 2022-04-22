@@ -13,6 +13,7 @@
         <ini name="error_reporting" value="-1" />
         <ini name="zend.enable_gc" value="0" />
         <ini name="memory_limit" value="-1" />
+        <env name="SYMFONY_DEPRECATIONS_HELPER" value="999999" />
     </php>
 
     <testsuites>
