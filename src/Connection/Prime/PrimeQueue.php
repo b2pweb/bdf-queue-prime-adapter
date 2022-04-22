@@ -273,7 +273,7 @@ class AbstractPrimeQueue implements QueueDriverInterface, ReservableQueueDriverI
     }
 }
 
-if (class_exists(CountableQueueDriverInterface::class)) {
+if (interface_exists(CountableQueueDriverInterface::class)) {
     class PrimeQueue extends AbstractPrimeQueue implements CountableQueueDriverInterface
     {
 
