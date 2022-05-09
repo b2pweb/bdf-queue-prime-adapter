@@ -29,7 +29,7 @@ class PrimeConnectionTest extends TestCase
         
         $this->connection = new PrimeConnection('name', new JsonSerializer(), Prime::service()->connections());
         $this->connection->setConfig(['host' => 'test', 'table' => 'job']);
-        $this->connection->schema();
+        $this->connection->declareQueue('queue');
     }
     
     /**
