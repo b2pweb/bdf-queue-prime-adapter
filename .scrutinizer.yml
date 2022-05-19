@@ -10,6 +10,17 @@ build:
         override:
           - php-scrutinizer-run
     coverage:
+      dependencies:
+        override:
+          - wget https://sqlite.org/2022/sqlite-autoconf-3380500.tar.gz --no-check-certificate
+          - tar -xvf sqlite-autoconf-3380500.tar.gz && cd sqlite-autoconf-3380500
+          - ./configure
+          - make
+          - sudo make install
+          - export PATH="/usr/local/lib:$PATH"
+          - cd ..
+          - composer install
+
       tests:
         override:
           - command: composer run tests-with-coverage
