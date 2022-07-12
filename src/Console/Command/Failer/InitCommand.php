@@ -5,6 +5,7 @@ namespace Bdf\Queue\Console\Command\Failer;
 use Bdf\Queue\Failer\DbFailedJobStorage;
 use Bdf\Queue\Failer\FailedJobStorageInterface;
 use Bdf\Util\Console\BdfStyle;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
@@ -13,6 +14,7 @@ use Symfony\Component\Console\Output\OutputInterface;
 /**
  * InitCommand
  */
+#[AsCommand('queue:prime:failer:init', 'Create or update db table failer.')]
 class InitCommand extends Command
 {
     protected static $defaultName = 'queue:prime:failer:init';
